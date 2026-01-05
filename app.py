@@ -3,7 +3,7 @@ import google.generativeai as genai
 from PIL import Image
 import io
 
-# 1. Настройка стиля VALI (Золото на темном)
+# 1. Настройка стиля VALI (Премиальный темный интерфейс)
 st.set_page_config(
     page_title="VALI Smart Audit",
     page_icon="💎",
@@ -12,87 +12,87 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .stApp {
-        background-color: #0E1117;
-        color: #D4AF37;
-    }
-    .stMarkdown h1, h2, h3 {
-        color: #D4AF37 !important;
-        text-align: center;
-    }
+    .stApp { background-color: #0E1117; color: #D4AF37; }
+    .stMarkdown h1, h2, h3 { color: #D4AF37 !important; text-align: center; }
     .stButton>button {
         width: 100%;
         background-color: #D4AF37;
         color: black;
         border-radius: 12px;
-        border: none;
-        height: 3em;
         font-weight: bold;
-        transition: 0.3s;
+        height: 3em;
+        border: none;
     }
-    .stButton>button:hover {
-        background-color: #B8962E;
-        color: white;
-    }
-    /* Стилизация загрузчика файлов */
-    .stFileUploader {
-        border: 1px dashed #D4AF37;
-        border-radius: 10px;
-        padding: 10px;
-    }
+    .stRadio > label { color: #D4AF37 !important; font-weight: bold; }
+    div[data-testid="stExpander"] { border: 1px solid #D4AF37; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Подключение ИИ (Ключ берем из секретов Streamlit)
+# 2. Логика выбора моделей Gemini 2.5
+# Подключаем API ключ из секретов
 try:
-    genai.configure(api_key=st.secrets["GEMINI_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except Exception as e:
-    st.error("Ошибка конфигурации. Проверьте GEMINI_KEY в Secrets.")
+    API_KEY = st.secrets["GEMINI_KEY"]
+    genai.configure(api_key=API_KEY)
+except:
+    st.error("Критическая ошибка: GEMINI_KEY не найден в Secrets.")
 
-# 3. Интерфейс приложения
+# Интерфейс выбора тарифа
 st.title("💎 VALI | SMART AUDIT")
-st.markdown("### Искусственный интеллект для проверки ваших инвойсов")
-st.write("---")
+st.markdown("### Выберите уровень интеллекта для проверки")
 
-uploaded_file = st.file_uploader("Загрузите фото инвойса или накладной", type=['png', 'jpg', 'jpeg'])
+# Маппинг моделей на основе актуальной линейки 2026 года
+tier = st.radio(
+    "Режим аудита:",
+    ["Стандарт (2.5 Flash-Lite)", "Профи (2.5 Flash)", "Сенсей (2.5 Pro)"],
+    index=1,
+    help="Lite — быстро и дешево, Pro — максимальная точность для сложных документов."
+)
+
+model_map = {
+    "Стандарт (2.5 Flash-Lite)": "gemini-2.5-flash-lite",
+    "Профи (2.5 Flash)": "gemini-2.5-flash",
+    "Сенсей (2.5 Pro)": "gemini-2.5-pro"
+}
+
+selected_model_id = model_map[tier]
+
+# 3. Загрузка и анализ
+uploaded_file = st.file_uploader("Загрузите фото инвойса (JPG, PNG)", type=['png', 'jpg', 'jpeg'])
 
 if uploaded_file:
-    # Показываем превью
     image = Image.open(uploaded_file)
-    st.image(image, caption='Документ загружен', use_container_width=True)
+    st.image(image, caption='Документ готов к анализу', use_container_width=True)
     
-    # Кнопка запуска анализа
-    if st.button("ЗАПУСТИТЬ АУДИТ СЕНСЕЕМ"):
-        with st.spinner('Сенсей анализирует данные...'):
+    if st.button(f"ЗАПУСТИТЬ АУДИТ ({tier})"):
+        with st.spinner(f'Модель {selected_model_id} анализирует данные...'):
             try:
-                # Промпт-инструкция для ИИ
+                # Инициализация выбранной модели
+                model = genai.GenerativeModel(selected_model_id)
+                
+                # Промпт для профессионального аудита
                 prompt = """
-                Ты — VALI, профессиональный AI-аудитор закупок из Китая. 
-                Твоя задача:
-                1. Проверить корректность математических вычислений (цена * количество = итог).
-                2. Оценить адекватность цен. Если цена кажется завышенной для опта из Китая, укажи на это.
-                3. Проверить логистические данные, если они есть.
+                Ты — VALI, ведущий AI-аудитор по закупкам. 
+                Проанализируй этот документ:
+                1. Перепроверь математику (Цена x Кол-во).
+                2. Оцени адекватность цен для оптового рынка.
+                3. Найди скрытые наценки или странные позиции.
                 
-                Выдай ответ в формате:
-                ✅ МАТЕМАТИКА: (ОК или Найдена ошибка)
-                💰 ЦЕНЫ: (Рыночные или Завышены)
-                🛠 ВЕРДИКТ: (Краткий совет пользователю)
-                
-                Отвечай строго на русском языке, вежливо, но профессионально.
+                Ответь в стиле:
+                ✅ ИТОГ МАТЕМАТИКИ: 
+                💰 АНАЛИЗ ЦЕН: 
+                ⚠️ РИСКИ: 
+                💡 СОВЕТ:
+                Отвечай на русском языке.
                 """
                 
                 response = model.generate_content([prompt, image])
                 
                 st.write("---")
-                st.markdown("### РЕЗУЛЬТАТ ПРОВЕРКИ:")
+                st.markdown(f"### Вердикт от {selected_model_id}:")
                 st.success(response.text)
                 
             except Exception as e:
-                st.error(f"Произошла ошибка при анализе: {e}")
+                st.error(f"Ошибка модели: {e}")
 
-else:
-    st.info("Ожидаю файл для анализа...")
-
-st.markdown("---")
-st.caption("VALI v1.0 | Защищено технологиями ИИ")
+st.write("---")
+st.caption("VALI v2.5 | Работает на базе Google Gemini 2.5 Next-Gen")
