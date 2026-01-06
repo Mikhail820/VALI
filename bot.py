@@ -1,41 +1,22 @@
-import os
 import telebot
-from telebot import types
+from database import init_db, add_user
 
-# 1. Настройка ключей
-# TOKEN нужно будет добавить в настройки хостинга (Secrets/Environment Variables)
-TOKEN = os.environ.get("BOT_TOKEN")
-# URL — это ссылка, которую тебе выдаст Streamlit после деплоя
-WEB_APP_URL = os.environ.get("WEB_APP_URL", "https://твой-апп.streamlit.app")
+# ... твои настройки TOKEN и WEB_APP_URL ...
 
 bot = telebot.TeleBot(TOKEN)
+init_db() # Инициализируем базу при запуске
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    # Создаем кнопку Mini App
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    web_app = types.WebAppInfo(WEB_APP_URL)
+    # Сохраняем пользователя в базу
+    add_user(message.from_user.id, message.from_user.username)
     
-    # Главная кнопка запуска
-    btn = types.KeyboardButton("🚀 ЗАПУСТИТЬ VALI", web_app=web_app)
+    # Дальше твой код с кнопкой запуска Mini App
+    # Важно: передаем user_id в ссылке, чтобы Streamlit узнал юзера
+    web_app_url_with_id = f"{WEB_APP_URL}?user_id={message.from_user.id}"
+    
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn = telebot.types.KeyboardButton("🚀 ЗАПУСТИТЬ VALI", web_app=telebot.types.WebAppInfo(web_app_url_with_id))
     markup.add(btn)
     
-    # Приветственное сообщение
-    welcome_text = (
-        "💎 **VALI | Smart Audit** на связи!\n\n"
-        "Я помогу тебе проверить инвойс на честность: \n"
-        "• Найду ошибки в расчетах\n"
-        "• Сверю цены с рынком Китая\n\n"
-        "Нажми кнопку ниже, чтобы начать аудит 👇"
-    )
-    
-    bot.send_message(
-        message.chat.id, 
-        welcome_text, 
-        parse_mode="Markdown", 
-        reply_markup=markup
-    )
-
-if __name__ == '__main__':
-    print("VALI Bot запущен...")
-    bot.infinity_polling()
+    bot.send_message(message.chat.id, "💎 Добро пожаловать в VALI!", reply_markup=markup)
