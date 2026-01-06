@@ -1,41 +1,92 @@
 import streamlit as st
 from PIL import Image
 import time
-from styles import apply_styles, render_header
+import os
+from styles import apply_styles, render_header, render_disclaimer
 from engine import run_smart_audit
+from database import init_db, is_user_subscribed
 
-# SEO Конфигурация
-st.set_page_config(page_title="VALI | Аудит 16.8%", page_icon="💎", layout="centered")
+# 1. Настройка страницы и SEO
+st.set_page_config(
+    page_title="VALI | Smart Audit",
+    page_icon="💎",
+    layout="centered"
+)
 
+# Мета-теги для SEO
 st.markdown("""
     <head>
-        <meta name="description" content="VALI - умный ИИ-аудит инвойсов. Верни свои 16.8% переплат.">
-        <meta name="keywords" content="аудит, китай, инвойс, карго, Gemini 2.5">
+        <meta name="description" content="VALI - автономный аудит инвойсов.">
+        <meta name="keywords" content="аудит, инвойс, Китай, Gemini">
     </head>
 """, unsafe_allow_html=True)
 
-if 'last_request' not in st.session_state:
-    st.session_state.last_request = 0
-
+# 2. Инициализация базы и стилей
+init_db()
 apply_styles()
 render_header()
 
-quality = st.select_slider("", options=["Молния", "Профи", "Сенсей"], value="Профи") #
+# 3. Получение user_id из URL (передается ботом)
+query_params = st.query_params
+user_id = query_params.get("user_id")
+
+# Вспомогательная переменная в сессии для тестов (если зашли без Telegram)
+if 'test_mode' not in st.session_state:
+    st.session_state.test_mode = False
+
+# 4. Интерфейс загрузки
 uploaded_file = st.file_uploader("", type=['png', 'jpg', 'jpeg'], label_visibility="collapsed")
 
 if uploaded_file:
     img = Image.open(uploaded_file)
-    if st.button("РАСКРЫТЬ ПЕРЕПЛАТУ"):
-        current_time = time.time()
-        if current_time - st.session_state.last_request < 15:
-            st.error(f"🛡️ Защита: Подождите {int(15 - (current_time - st.session_state.last_request))} сек.")
+    with st.expander("📄 Посмотреть документ"):
+        st.image(img, use_container_width=True)
+
+    # ГЛАВНАЯ КНОПКА (Нейтральное название)
+    if st.button("ПРОВЕРИТЬ ИНВОЙС"):
+        
+        # ШАГ 1: Проверка на вшивость (есть ли user_id)
+        if not user_id and not st.session_state.test_mode:
+            st.error("⚠️ Ошибка авторизации. Пожалуйста, запустите приложение через Telegram-бота.")
         else:
-            with st.spinner('АНАЛИЗ ПО СТАНДАРТУ 16.8%...'):
-                st.session_state.last_request = current_time
-                res_text, qr_code, ref_url = run_smart_audit(img, quality)
+            # ШАГ 2: Проверка подписки в базе данных
+            # (Функция is_user_subscribed должна реально проверять статус в vali_users.db)
+            subscribed = is_user_subscribed(user_id) if user_id else st.session_state.test_mode
+            
+            if not subscribed:
+                # БЛОКИРОВКА: ИИ не вызывается, токены не тратятся
+                st.warning("📊 ОТЧЕТ СФОРМИРОВАН, НО ЗАБЛОКИРОВАН")
+                st.markdown("""
+                    <div style="background: rgba(212,175,55,0.05); padding: 20px; border-radius: 15px; border: 1px solid #D4AF37; text-align: center;">
+                        <p style="margin-bottom: 15px;">Для получения доступа к результатам анализа необходимо подписаться на наш официальный канал.</p>
+                        <a href="https://t.me/твой_канал" target="_blank" style="text-decoration: none;">
+                            <div style="background: #D4AF37; color: black; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer;">
+                                🔗 ПОДПИСАТЬСЯ И ПОЛУЧИТЬ ДОСТУП
+                            </div>
+                        </a>
+                    </div>
+                """, unsafe_allow_html=True)
                 
-                if "🛡️" in res_text:
-                    st.warning(res_text)
+                # Кнопка для ручной проверки (для отладки)
+                if st.button("Я подписался, обновить"):
+                    st.rerun()
+            else:
+                # ШАГ 3: Запуск ИИ только для «своих»
+                current_time = time.time()
+                if 'last_req' not in st.session_state: st.session_state.last_req = 0
+                
+                if current_time - st.session_state.last_req < 15:
+                    st.toast("🛡️ Подождите 15 секунд...")
                 else:
-                    st.success(res_text)
-                    st.image(qr_code, width=150, caption="Сканируй для полного отчета")
+                    with st.spinner('СИНХРОНИЗАЦИЯ С БАЗОЙ...'):
+                        st.session_state.last_req = current_time
+                        res_text, bot_url = run_smart_audit(img)
+                        
+                        st.markdown("---")
+                        st.success(res_text)
+                        
+                        # Вместо некликабельного QR — кнопка возврата в бот за PDF/подробностями
+                        st.link_button("ПОЛУЧИТЬ ПОЛНЫЙ ОТЧЕТ В TG", bot_url)
+
+# 5. Футер с дисклеймером
+render_disclaimer()
